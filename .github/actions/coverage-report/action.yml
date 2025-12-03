@@ -1,0 +1,166 @@
+name: 'Coverage Report'
+description: 'Run dotnet test with coverage collection, generate reports, and optionally run CodeQL scanning'
+inputs:
+  working-directory:
+    description: 'Working directory containing the solution/projects'
+    required: false
+    default: '.'
+  test-projects:
+    description: 'Glob pattern for test projects'
+    required: false
+    default: '**/*Tests.csproj'
+  fail-under:
+    description: 'Optional minimum coverage threshold (0-100). Build fails if coverage is below this value.'
+    required: false
+  codeql-enabled:
+    description: 'Enable CodeQL scanning for C#'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for posting PR comments'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Initialize CodeQL (if enabled)
+      if: inputs.codeql-enabled == 'true'
+      uses: github/codeql-action/init@v3
+      with:
+        languages: csharp
+
+    - name: Restore dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: dotnet restore
+
+    - name: Run tests with coverage
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        dotnet test ${{ inputs.test-projects }} \
+          --no-restore \
+          --verbosity normal \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./coverage \
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+    - name: Install ReportGenerator
+      shell: bash
+      run: dotnet tool install --global dotnet-reportgenerator-globaltool || true
+
+    - name: Generate coverage report
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        reportgenerator \
+          -reports:"coverage/**/coverage.opencover.xml" \
+          -targetdir:"coverage-report" \
+          -reporttypes:"Html;Cobertura" \
+          -verbosity:"Info"
+        
+        # Extract summary metrics
+        if [ -f "coverage-report/Cobertura.xml" ]; then
+          echo "Coverage report generated successfully"
+          
+          # Parse line coverage from Cobertura
+          LINE_RATE=$(grep -oP 'line-rate="\K[^"]+' coverage-report/Cobertura.xml | head -1)
+          LINE_COVERAGE=$(echo "$LINE_RATE * 100" | bc -l | xargs printf "%.2f")
+          echo "LINE_COVERAGE=$LINE_COVERAGE" >> $GITHUB_ENV
+          echo "Line Coverage: $LINE_COVERAGE%"
+          
+          # Parse branch coverage from Cobertura
+          BRANCH_RATE=$(grep -oP 'branch-rate="\K[^"]+' coverage-report/Cobertura.xml | head -1)
+          BRANCH_COVERAGE=$(echo "$BRANCH_RATE * 100" | bc -l | xargs printf "%.2f")
+          echo "BRANCH_COVERAGE=$BRANCH_COVERAGE" >> $GITHUB_ENV
+          echo "Branch Coverage: $BRANCH_COVERAGE%"
+        fi
+
+    - name: Check coverage threshold
+      if: inputs.fail-under != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        THRESHOLD=${{ inputs.fail-under }}
+        COVERAGE=${LINE_COVERAGE:-0}
+        
+        echo "Coverage: $COVERAGE%"
+        echo "Threshold: $THRESHOLD%"
+        
+        if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+          echo "❌ Coverage $COVERAGE% is below threshold $THRESHOLD%"
+          exit 1
+        else
+          echo "✅ Coverage $COVERAGE% meets threshold $THRESHOLD%"
+        fi
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: ${{ inputs.working-directory }}/coverage-report
+        retention-days: 30
+
+    - name: Comment PR with coverage summary
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const lineCoverage = process.env.LINE_COVERAGE || 'N/A';
+          const branchCoverage = process.env.BRANCH_COVERAGE || 'N/A';
+          const threshold = '${{ inputs.fail-under }}';
+          
+          const body = `## 📊 Coverage Report
+          
+          | Metric | Coverage |
+          |--------|----------|
+          | Line Coverage | ${lineCoverage}% |
+          | Branch Coverage | ${branchCoverage}% |
+          ${threshold ? `| Threshold | ${threshold}% |` : ''}
+          
+          ${threshold && parseFloat(lineCoverage) < parseFloat(threshold) ? '❌ Coverage is below the required threshold!' : '✅ Coverage check passed!'}
+          
+          [View detailed coverage report in artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+          `;
+          
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+          
+          const botComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('📊 Coverage Report')
+          );
+          
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: body
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+          }
+
+    - name: Perform CodeQL Analysis (if enabled)
+      if: inputs.codeql-enabled == 'true'
+      uses: github/codeql-action/analyze@v3
+      with:
+        category: "/language:csharp"

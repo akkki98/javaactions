@@ -1,0 +1,52 @@
+name: Coverage Report
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write  # Required for CodeQL
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run coverage report
+        uses: ./.github/actions/coverage-report
+        with:
+          working-directory: '.'
+          test-projects: '**/*Tests.csproj'
+          fail-under: '80'
+          codeql-enabled: 'false'  # Set to 'true' to enable CodeQL scanning
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  coverage-with-codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      security-events: write
+    
+    # This job demonstrates CodeQL integration
+    # Uncomment to enable it
+    if: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run coverage report with CodeQL
+        uses: ./.github/actions/coverage-report
+        with:
+          working-directory: '.'
+          test-projects: '**/*Tests.csproj'
+          fail-under: '75'
+          codeql-enabled: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
