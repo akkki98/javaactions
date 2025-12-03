@@ -27,6 +27,8 @@ jobs:
           codeql-enabled: 'false'  # Set to 'true' to enable CodeQL scanning
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+  # Example: Coverage with CodeQL (disabled by default)
+  # To enable: change 'if: github.event.repository.fork == false' or remove the condition
   coverage-with-codeql:
     runs-on: ubuntu-latest
     permissions:
@@ -35,8 +37,8 @@ jobs:
       security-events: write
     
     # This job demonstrates CodeQL integration
-    # Uncomment to enable it
-    if: false
+    # Enable by removing or modifying this condition
+    if: github.event.repository.fork == false && false
     
     steps:
       - name: Checkout code

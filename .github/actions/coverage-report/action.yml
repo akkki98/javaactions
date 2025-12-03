@@ -52,7 +52,12 @@ runs:
 
     - name: Install ReportGenerator
       shell: bash
-      run: dotnet tool install --global dotnet-reportgenerator-globaltool || true
+      run: |
+        if ! command -v reportgenerator &> /dev/null; then
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+        else
+          echo "ReportGenerator is already installed"
+        fi
 
     - name: Generate coverage report
       shell: bash
@@ -68,17 +73,34 @@ runs:
         if [ -f "coverage-report/Cobertura.xml" ]; then
           echo "Coverage report generated successfully"
           
-          # Parse line coverage from Cobertura
+          # Check for required tools
+          if ! command -v bc &> /dev/null; then
+            echo "Error: 'bc' command not found. Cannot calculate coverage percentages."
+            exit 1
+          fi
+          
+          # Parse line coverage from Cobertura with error handling
           LINE_RATE=$(grep -oP 'line-rate="\K[^"]+' coverage-report/Cobertura.xml | head -1)
+          if [ -z "$LINE_RATE" ]; then
+            echo "Error: Could not parse line-rate from Cobertura.xml"
+            exit 1
+          fi
           LINE_COVERAGE=$(echo "$LINE_RATE * 100" | bc -l | xargs printf "%.2f")
           echo "LINE_COVERAGE=$LINE_COVERAGE" >> $GITHUB_ENV
           echo "Line Coverage: $LINE_COVERAGE%"
           
-          # Parse branch coverage from Cobertura
+          # Parse branch coverage from Cobertura with error handling
           BRANCH_RATE=$(grep -oP 'branch-rate="\K[^"]+' coverage-report/Cobertura.xml | head -1)
+          if [ -z "$BRANCH_RATE" ]; then
+            echo "Error: Could not parse branch-rate from Cobertura.xml"
+            exit 1
+          fi
           BRANCH_COVERAGE=$(echo "$BRANCH_RATE * 100" | bc -l | xargs printf "%.2f")
           echo "BRANCH_COVERAGE=$BRANCH_COVERAGE" >> $GITHUB_ENV
           echo "Branch Coverage: $BRANCH_COVERAGE%"
+        else
+          echo "Error: Coverage report not generated. Cobertura.xml not found."
+          exit 1
         fi
 
     - name: Check coverage threshold
@@ -87,7 +109,12 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: |
         THRESHOLD=${{ inputs.fail-under }}
-        COVERAGE=${LINE_COVERAGE:-0}
+        COVERAGE=${LINE_COVERAGE}
+        
+        if [ -z "$COVERAGE" ]; then
+          echo "❌ Error: Coverage value not available. Cannot check threshold."
+          exit 1
+        fi
         
         echo "Coverage: $COVERAGE%"
         echo "Threshold: $THRESHOLD%"
