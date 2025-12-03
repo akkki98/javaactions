@@ -2,7 +2,6 @@ package hello;
 
 import org.joda.time.LocalTime;
 import hello.exception.InvalidInputException;
-import hello.exception.GreetingException;
 
 /**
  * Main application class that demonstrates greeting functionality
@@ -37,16 +36,9 @@ public class HelloWorld {
         }
       }
       
-    } catch (GreetingException e) {
-      System.err.println("Greeting Error: " + e.getMessage());
-      if (e.getCause() != null) {
-        System.err.println("Caused by: " + e.getCause().getMessage());
-      }
     } catch (Exception e) {
       System.err.println("Unexpected error occurred: " + e.getMessage());
       e.printStackTrace();
     }
   }
 }
-//test12
-//test
