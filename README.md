@@ -210,18 +210,18 @@ To generate HTML documentation from JavaDoc comments:
 mvn javadoc:javadoc
 ```
 
-The generated documentation will be available in `target/site/apidocs/index.html`
+The generated documentation will be available in `target/reports/apidocs/index.html`
 
 ### Opening JavaDoc in Browser
 
 **On Linux/macOS:**
 ```bash
-open target/site/apidocs/index.html
+open target/reports/apidocs/index.html
 ```
 
 **On Windows:**
 ```bash
-start target/site/apidocs/index.html
+start target/reports/apidocs/index.html
 ```
 
 ### Key Classes
