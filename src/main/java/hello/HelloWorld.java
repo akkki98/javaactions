@@ -10,7 +10,7 @@ import hello.exception.InvalidInputException;
 public class HelloWorld {
   
   /**
-   * Main entry point of the application.
+   * Main entry point of the application codebase.
    * 
    * @param args command line arguments (optional name for personalized greeting)
    */
