@@ -25,7 +25,7 @@ public class HelloWorld {
       // Default greeting
       System.out.println(greeter.sayHello());
       
-      // Personalized greeting if name provided as argument
+      // Personalized greeting if name provided as arguments
       if (args != null && args.length > 0) {
         String name = args[0];
         try {
